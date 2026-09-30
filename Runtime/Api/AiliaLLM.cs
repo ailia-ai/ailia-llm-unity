@@ -146,6 +146,18 @@ public class AiliaLLM
     public const int AILIA_LLM_STATUS_ERROR_BUFFER_API = (-9);
     /**
     * \~japanese
+    * @def AILIA_LLM_STATUS_PARSE_ERROR
+    * @brief 生成テキストの解析に失敗した
+    * @remark モデルの出力がチャットテンプレートのツール呼び出し構文と一致しませんでした。生成時と同じツール定義とThinking設定で解析しているか確認してください。
+    *
+    * \~english
+    * @def AILIA_LLM_STATUS_PARSE_ERROR
+    * @brief Failed to parse the generated text.
+    * @remark The model output did not match the tool call syntax of the chat template. Please check that the same tool definitions and thinking setting as used for the generation are set.
+    */
+    public const int AILIA_LLM_STATUS_PARSE_ERROR = (-10);
+    /**
+    * \~japanese
     * @def AILIA_LLM_STATUS_UNIMPLEMENTED
     * @brief 未実装
     * @remark
@@ -352,6 +364,36 @@ public class AiliaLLM
 
     /**
     * \~japanese
+    * @brief ツール（関数）の定義を設定します。
+    * @param llm LLMオブジェクトポインタ
+    * @param tools_json OpenAI互換のツール定義JSON配列（UTF-8、NULL終端）。IntPtr.Zeroで解除します。
+    * @return
+    *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
+    * @details
+    *   OpenAI Chat Completions APIのtoolsパラメータと同じ形式でツールを定義します。
+    *   設定したツールは次回のailiaLLMSetPrompt時にチャットテンプレート経由でプロンプトへ展開され、
+    *   出力はツール呼び出し構文のgrammarで制約されます。生の出力はailiaLLMGetResponseJsonで構造化できます。
+    *   ツール設定中、role "assistant" のcontentは生の出力、role "tool" のcontentはツールの実行結果として解釈されます。
+    *   ツール設定中は従来のプロンプトAPIを拒否します。SetPromptJson/GetResponseJsonを使用してください。
+    *
+    * \~english
+    * @brief Set the tool (function) definitions.
+    * @param llm A LLM instance pointer
+    * @param tools_json OpenAI-compatible JSON array of tool definitions (UTF-8, null terminated). IntPtr.Zero clears the tools.
+    * @return
+    *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
+    * @details
+    *   Tools are defined in the same format as the tools parameter of the OpenAI Chat Completions API.
+    *   They are rendered into the prompt through the chat template on the next ailiaLLMSetPrompt,
+    *   and the output is constrained by a grammar for the tool call syntax. Parse the raw output with ailiaLLMGetResponseJson.
+    *   While tools are set, the content of role "assistant" is the raw output and the content of role "tool" is the tool result.
+    *   Legacy prompt APIs reject tool use. Use SetPromptJson/GetResponseJson instead.
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetTools(IntPtr llm, IntPtr tools_json);
+
+    /**
+    * \~japanese
     * @brief プロンプトを設定します。
     * @param llm LLMオブジェクトポインタへのポインタ
     * @param message メッセージの配列
@@ -375,6 +417,13 @@ public class AiliaLLM
     */
     [DllImport(LIBRARY_NAME)]
     public static extern int ailiaLLMSetPrompt(IntPtr llm, IntPtr messages, uint messages_len);
+
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetPromptJson(IntPtr llm, IntPtr messages_json);
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMGetResponseJsonSize(IntPtr llm, ref uint size);
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMGetResponseJson(IntPtr llm, IntPtr json, uint size);
 
     /**
     * \~japanese
@@ -645,6 +694,12 @@ public class AiliaLLM
     */
     [DllImport(LIBRARY_NAME)]
     public static extern int ailiaLLMGetBackendName(ref IntPtr env, uint env_idx);
+
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMGetBackendDeviceName(ref IntPtr name, uint env_idx);
+
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetBackend(IntPtr llm, uint backend_idx);
 
     /**
     * \~japanese

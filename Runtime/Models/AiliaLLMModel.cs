@@ -70,6 +70,13 @@ public class AiliaLLMModel : IDisposable
 		return true;
 	}
 
+	public bool SetBackend(uint backend_idx){
+		if (net == IntPtr.Zero){
+			return false;
+		}
+		return AiliaLLM.ailiaLLMSetBackend(net, backend_idx) == AiliaLLM.AILIA_LLM_STATUS_SUCCESS;
+	}
+
 	/**
 	* \~japanese
 	* @brief モデルファイルを開きます。
@@ -355,6 +362,54 @@ public class AiliaLLMModel : IDisposable
 			return false;
 		}
 
+		return true;
+	}
+
+    /// <summary>Sets structured JSON history. Required with tools; media parts need a compatible projector.</summary>
+    public bool SetPromptJson(string messagesJson) {
+        if (messagesJson == null) return false;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(messagesJson + "\u0000");
+        var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
+        int status;
+        try { status = AiliaLLM.ailiaLLMSetPromptJson(net, handle.AddrOfPinnedObject()); }
+        finally { handle.Free(); }
+        context_full = status == AiliaLLM.AILIA_LLM_STATUS_CONTEXT_FULL;
+        if (status != 0) { if (logging) Debug.Log("SetPromptJson failed " + status); return false; }
+        buf = new byte[0]; before_text = "";
+        return true;
+    }
+
+    /// <summary>Gets buffered assistant JSON without collecting deltas. Empty string on error.</summary>
+    public string GetResponseJson() {
+        uint size = 0;
+        int status = AiliaLLM.ailiaLLMGetResponseJsonSize(net, ref size);
+        if (status != 0) { if (logging) Debug.Log("GetResponseJsonSize failed " + status); return ""; }
+        var bytes = new byte[size];
+        var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
+        try { status = AiliaLLM.ailiaLLMGetResponseJson(net, handle.AddrOfPinnedObject(), size); }
+        finally { handle.Free(); }
+        if (status != 0) { if (logging) Debug.Log("GetResponseJson failed " + status); return ""; }
+        return System.Text.Encoding.UTF8.GetString(bytes, 0, (int)size - 1);
+    }
+
+	public bool SetTools(string tools_json)
+	{
+		int status = 0;
+		if (string.IsNullOrEmpty(tools_json)){
+			status = AiliaLLM.ailiaLLMSetTools(net, IntPtr.Zero);
+		} else {
+			byte[] tools_bytes = System.Text.Encoding.UTF8.GetBytes(tools_json + "\u0000");
+			GCHandle tools_handle = GCHandle.Alloc(tools_bytes, GCHandleType.Pinned);
+			status = AiliaLLM.ailiaLLMSetTools(net, tools_handle.AddrOfPinnedObject());
+			tools_handle.Free();
+		}
+		if (status != 0){
+			if (logging)
+			{
+				Debug.Log("ailiaLLMSetTools failed " + status);
+			}
+			return false;
+		}
 		return true;
 	}
 
