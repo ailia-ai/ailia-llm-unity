@@ -585,22 +585,26 @@ public class AiliaLLM
     * \~japanese
     * @brief マルチモーダルプロジェクタファイルを読み込みます。
     * @param llm LLMオブジェクトポインタ
-    * @param mmproj_path MMPROJファイルのパス（GGUF形式）
+    * @param mmproj_path MMPROJ GGUFまたは自己完結ailia QNN projector（.qnn）のパス
     * @return
     *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     * @details
     *   マルチモーダル機能を使用するには、先にailiaLLMOpenModelFileでテキストモデルを読み込み、
     *   その後でこの関数でマルチモーダルプロジェクタを読み込む必要があります。
+    *   画像入力（VLM）には画像対応、音声入力（ALM）には音声対応のprojectorが必要です。
+    *   QNN projectorはAndroid arm64とWindows ARM64に対応します。
     *
     * \~english
     * @brief Load multimodal projector file.
     * @param llm A LLM instance pointer
-    * @param mmproj_path Path to the MMPROJ file (GGUF format)
+    * @param mmproj_path Path to an MMPROJ GGUF or self-contained ailia QNN projector (.qnn)
     * @return
     *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
     * @details
     *   To use multimodal features, you must first load the text model with ailiaLLMOpenModelFile,
     *   then load the multimodal projector with this function.
+    *   Image input (VLM) requires a vision-capable projector, while audio input (ALM)
+    *   requires an audio-capable projector. QNN projectors support Android arm64 and Windows ARM64.
     */
     #if (UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
         [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenMultimodalProjectorFileW", CharSet=CharSet.Unicode)]
@@ -614,8 +618,8 @@ public class AiliaLLM
     * \~japanese
     * @brief マルチモーダル機能がサポートされているかを確認します。
     * @param llm LLMオブジェクトポインタ
-    * @param vision_support 画像処理をサポートしているか
-    * @param audio_support 音声処理をサポートしているか
+    * @param vision_support 画像入力（VLM）をサポートしているか
+    * @param audio_support 音声入力（ALM）をサポートしているか
     * @return
     *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     * @details
@@ -624,8 +628,8 @@ public class AiliaLLM
     * \~english
     * @brief Check if multimodal features are supported.
     * @param llm A LLM instance pointer
-    * @param vision_support Whether image processing is supported
-    * @param audio_support Whether audio processing is supported
+    * @param vision_support Whether image input (VLM) is supported
+    * @param audio_support Whether audio input (ALM) is supported
     * @return
     *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
     * @details
@@ -719,11 +723,13 @@ public class AiliaLLM
     * @brief デバイスのQNN成果物名（例: "sm8475"）を取得します。
     * @param model_name ライブラリが所有する文字列へのポインタ。解放しないでください。
     * @return QNN非対応時はUNIMPLEMENTED、未対応デバイスではOTHER_ERRORを返します。
+    * @details QNNはAndroid arm64とWindows ARM64に対応します。
     *
     * \~english
     * @brief Gets the device QNN artifact stem (for example, "sm8475") without a model.
     * @param model_name Pointer to a library-owned string; do not free it.
     * @return UNIMPLEMENTED when QNN is unavailable, or OTHER_ERROR for unsupported devices.
+    * @details QNN is supported on Android arm64 and Windows ARM64.
     */
     [DllImport(LIBRARY_NAME)]
     public static extern int ailiaLLMGetQNNModelName(ref IntPtr model_name);
