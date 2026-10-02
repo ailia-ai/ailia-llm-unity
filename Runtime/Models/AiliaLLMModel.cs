@@ -16,7 +16,7 @@ public class AiliaLLMChatMessage{
 }
 
 public class AiliaLLMMediaData{
-	public string media_type; // "image" or "audio"
+    public string media_type; // "image" or "audio" (requires an audio-capable mmproj)
 	public string file_path;
 	public byte[] data;
 	public uint width;
@@ -31,8 +31,33 @@ public class AiliaLLMMultimodalChatMessage{
 
 public class AiliaLLMModel : IDisposable
 {
+	/**
+	 * \~japanese
+	 * @brief モデルを作成せずにデバイスのQNN成果物名を取得します。
+	 * @return QNN成果物名
+	 * @throw InvalidOperationException QNN非対応時、または未対応デバイスの場合
+	 *
+	 * \~english
+	 * @brief Gets the device QNN artifact stem without creating a model.
+	 * @return QNN artifact stem
+	 * @throw InvalidOperationException If QNN is unavailable or the device is unsupported
+	 */
+	public static string GetQNNModelName() {
+		IntPtr name = IntPtr.Zero;
+		int status = AiliaLLM.ailiaLLMGetQNNModelName(ref name);
+		if (status != AiliaLLM.AILIA_LLM_STATUS_SUCCESS || name == IntPtr.Zero) {
+			throw new InvalidOperationException("Failed to get QNN model name. Status: " + status);
+		}
+		// Model names are ASCII. Copy the library-owned string; never free it.
+		return Marshal.PtrToStringAnsi(name);
+	}
+
 	// instance
 	IntPtr net = IntPtr.Zero;
+	public string GetErrorDetail() {
+		IntPtr detail = AiliaLLM.ailiaLLMGetErrorDetail(net);
+		return detail == IntPtr.Zero ? "" : Marshal.PtrToStringAnsi(detail);
+	}
 	bool context_full = false;
 	bool logging = true;
 	byte [] buf = new byte[0];
@@ -70,6 +95,10 @@ public class AiliaLLMModel : IDisposable
 		return true;
 	}
 
+	/** Select a GPU, CPU, or HTP (QNN) backend before Open.
+	 * Without a selection, .qnn chooses HTP automatically. An explicit CPU/GPU
+	 * selection rejects .qnn, and an explicit HTP selection rejects GGUF.
+	 */
 	public bool SetBackend(uint backend_idx){
 		if (net == IntPtr.Zero){
 			return false;
@@ -365,7 +394,7 @@ public class AiliaLLMModel : IDisposable
 		return true;
 	}
 
-    /// <summary>Sets structured JSON history. Required with tools; media parts need a compatible projector.</summary>
+    /** @brief Sets structured JSON history. Required with tools; media parts need a compatible projector. */
     public bool SetPromptJson(string messagesJson) {
         if (messagesJson == null) return false;
         var bytes = System.Text.Encoding.UTF8.GetBytes(messagesJson + "\u0000");
@@ -379,7 +408,7 @@ public class AiliaLLMModel : IDisposable
         return true;
     }
 
-    /// <summary>Gets buffered assistant JSON without collecting deltas. Empty string on error.</summary>
+    /** @brief Gets buffered assistant JSON without collecting deltas. Empty string on error. */
     public string GetResponseJson() {
         uint size = 0;
         int status = AiliaLLM.ailiaLLMGetResponseJsonSize(net, ref size);

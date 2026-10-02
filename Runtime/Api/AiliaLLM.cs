@@ -227,11 +227,11 @@ public class AiliaLLM
         */
         public uint data_size;
         /**
-        * @brief Width for images (pixels), sample count for audio
+        * @brief Width for raw RGB images; use 0 for encoded image/audio data.
         */
         public uint width;
         /**
-        * @brief Height for images (pixels), unused for audio (set to 0)
+        * @brief Height for raw RGB images; use 0 for encoded image/audio data.
         */
         public uint height;
     }
@@ -286,22 +286,24 @@ public class AiliaLLM
     * \~japanese
     * @brief モデルファイルを読み込みます。
     * @param llm LLMオブジェクトポインタへのポインタ
-    * @param path GGUFファイルのパス
+    * @param path GGUFまたはQNNパッケージのパス
     * @param n_ctx コンテキスト長（0でモデルのデフォルト）
     * @return
     *   成功した場合は \ref AILIA_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     * @details
-    *   GGUFのモデルファイルを読み込みます。
+    *   バックエンド未選択ならGGUFはCPU/GPU、.qnnはHTPを自動選択します。
+    *   明示選択したバックエンドと異なるモデル形式は拒否します。
     *
     * \~english
     * @brief Open model file.
     * @param llm A pointer to the LLM instance pointer
-    * @param path Path for GGUF
+    * @param path Path for a GGUF model or QNN package
     * @param n_ctx Context length for model (0 is model default）
     * @return
     *   If this function is successful, it returns  \ref AILIA_STATUS_SUCCESS , or an error code otherwise.
     * @details
-    *   Open a model file for GGUF.
+    *   Without an explicit backend selection, GGUF selects CPU/GPU and .qnn
+    *   selects HTP. A model format mismatching an explicit selection is rejected.
     */
     #if (UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
         [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenModelFileW", CharSet=CharSet.Unicode)]
@@ -662,13 +664,13 @@ public class AiliaLLM
 
     /**
     * \~japanese
-    * @brief 利用可能な計算環境(CPU, GPU)の数を取得します
+    * @brief 利用可能な計算環境(GPU, CPU, HTP (QNN))の数を取得します
     * @param env_count 計算環境情報の数の格納先
     * @return
     *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     *
     * \~english
-    * @brief Gets the number of available computational environments (CPU, GPU).
+    * @brief Gets the number of available computational environments (GPU, CPU, HTP (QNN)).
     * @param env_count The storage location of the number of computational environment information
     * @return
     *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
@@ -712,5 +714,31 @@ public class AiliaLLM
     */
     [DllImport(LIBRARY_NAME)]
     public static extern void ailiaLLMDestroy(IntPtr llm);
+    /**
+    * \~japanese
+    * @brief デバイスのQNN成果物名（例: "sm8475"）を取得します。
+    * @param model_name ライブラリが所有する文字列へのポインタ。解放しないでください。
+    * @return QNN非対応時はUNIMPLEMENTED、未対応デバイスではOTHER_ERRORを返します。
+    *
+    * \~english
+    * @brief Gets the device QNN artifact stem (for example, "sm8475") without a model.
+    * @param model_name Pointer to a library-owned string; do not free it.
+    * @return UNIMPLEMENTED when QNN is unavailable, or OTHER_ERROR for unsupported devices.
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMGetQNNModelName(ref IntPtr model_name);
+    /**
+    * \~japanese
+    * @brief モデルのエラー詳細をUTF-8文字列で取得します。返された文字列は解放しないでください。
+    * @param llm LLMオブジェクトポインタ
+    * @return ライブラリが所有するUTF-8文字列へのポインタ
+    *
+    * \~english
+    * @brief Gets the model's error detail as a library-owned UTF-8 string; do not free it.
+    * @param llm An LLM instance pointer
+    * @return Pointer to a library-owned UTF-8 string
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern IntPtr ailiaLLMGetErrorDetail(IntPtr llm);
 }
 } // namespace ailiaLLM
