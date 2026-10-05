@@ -16,7 +16,7 @@ public class AiliaLLMChatMessage{
 }
 
 public class AiliaLLMMediaData{
-	public string media_type; // "image" or "audio"
+    public string media_type; // "image" or "audio" (requires an audio-capable mmproj)
 	public string file_path;
 	public byte[] data;
 	public uint width;
@@ -29,10 +29,97 @@ public class AiliaLLMMultimodalChatMessage{
 	public List<AiliaLLMMediaData> media_data;
 }
 
+/**
+ * \~japanese
+ * @brief 選択可能なバックエンドの情報です。
+ * @details idxはAiliaLLMModel.SetBackendに渡すインデックスです。
+ *
+ * \~english
+ * @brief Information about an available backend.
+ * @details Pass idx to AiliaLLMModel.SetBackend to select this backend.
+ */
+public class AiliaLLMBackendInfo{
+	public string backend_name;
+	public string device_name;
+	public uint idx;
+}
+
 public class AiliaLLMModel : IDisposable
 {
+	/**
+	 * \~japanese
+	 * @brief 利用可能なバックエンドの一覧を取得します。
+	 * @return バックエンド名、デバイス名、選択用インデックスの一覧
+	 * @throw InvalidOperationException バックエンド情報の取得に失敗した場合
+	 * @details モデルの作成前にも呼び出せます。選択する場合はCreateの後、Openの前に
+	 *   一覧のidxをSetBackendに渡してください。
+	 *
+	 * \~english
+	 * @brief Gets the available backends.
+	 * @return Backend names, device names, and indices for selection
+	 * @throw InvalidOperationException If backend enumeration fails
+	 * @details This can be called before creating a model. To select a backend,
+	 *   pass its idx to SetBackend after Create and before Open.
+	 */
+	public static List<AiliaLLMBackendInfo> GetBackendList() {
+		uint count = 0;
+		int status = AiliaLLM.ailiaLLMGetBackendCount(ref count);
+		if (status != AiliaLLM.AILIA_LLM_STATUS_SUCCESS) {
+			throw new InvalidOperationException("Failed to get backend count. Status: " + status);
+		}
+
+		var backends = new List<AiliaLLMBackendInfo>();
+		for (uint i = 0; i < count; i++) {
+			IntPtr backendName = IntPtr.Zero;
+			status = AiliaLLM.ailiaLLMGetBackendName(ref backendName, i);
+			if (status != AiliaLLM.AILIA_LLM_STATUS_SUCCESS || backendName == IntPtr.Zero) {
+				throw new InvalidOperationException("Failed to get backend name at index " + i + ". Status: " + status);
+			}
+
+			IntPtr deviceName = IntPtr.Zero;
+			status = AiliaLLM.ailiaLLMGetBackendDeviceName(ref deviceName, i);
+			if (status != AiliaLLM.AILIA_LLM_STATUS_SUCCESS || deviceName == IntPtr.Zero) {
+				throw new InvalidOperationException("Failed to get backend device name at index " + i + ". Status: " + status);
+			}
+
+			backends.Add(new AiliaLLMBackendInfo {
+				backend_name = Marshal.PtrToStringAnsi(backendName),
+				device_name = Marshal.PtrToStringAnsi(deviceName),
+				idx = i
+			});
+		}
+		return backends;
+	}
+
+	/**
+	 * \~japanese
+	 * @brief モデルを作成せずにデバイスのQNN成果物名を取得します。
+	 * @return QNN成果物名
+	 * @throw InvalidOperationException QNN非対応時、または未対応デバイスの場合
+	 * @details QNNはAndroid arm64とWindows ARM64に対応します。
+	 *
+	 * \~english
+	 * @brief Gets the device QNN artifact stem without creating a model.
+	 * @return QNN artifact stem
+	 * @throw InvalidOperationException If QNN is unavailable or the device is unsupported
+	 * @details QNN is supported on Android arm64 and Windows ARM64.
+	 */
+	public static string GetQNNModelName() {
+		IntPtr name = IntPtr.Zero;
+		int status = AiliaLLM.ailiaLLMGetQNNModelName(ref name);
+		if (status != AiliaLLM.AILIA_LLM_STATUS_SUCCESS || name == IntPtr.Zero) {
+			throw new InvalidOperationException("Failed to get QNN model name. Status: " + status);
+		}
+		// Model names are ASCII. Copy the library-owned string; never free it.
+		return Marshal.PtrToStringAnsi(name);
+	}
+
 	// instance
 	IntPtr net = IntPtr.Zero;
+	public string GetErrorDetail() {
+		IntPtr detail = AiliaLLM.ailiaLLMGetErrorDetail(net);
+		return detail == IntPtr.Zero ? "" : Marshal.PtrToStringAnsi(detail);
+	}
 	bool context_full = false;
 	bool logging = true;
 	byte [] buf = new byte[0];
@@ -68,6 +155,17 @@ public class AiliaLLMModel : IDisposable
 		}
 
 		return true;
+	}
+
+	/** Select a GPU, CPU, or HTP (QNN) backend before Open.
+	 * Without a selection, .qnn chooses HTP automatically. An explicit CPU/GPU
+	 * selection rejects .qnn, and an explicit HTP selection rejects GGUF.
+	 */
+	public bool SetBackend(uint backend_idx){
+		if (net == IntPtr.Zero){
+			return false;
+		}
+		return AiliaLLM.ailiaLLMSetBackend(net, backend_idx) == AiliaLLM.AILIA_LLM_STATUS_SUCCESS;
 	}
 
 	/**
@@ -107,15 +205,19 @@ public class AiliaLLMModel : IDisposable
 	/**
 	* \~japanese
 	* @brief マルチモーダルプロジェクタファイルを開きます。
-	* @param mmproj_path    MMPROJファイルへのパス。
+	* @param mmproj_path    MMPROJ GGUFまたは自己完結ailia QNN projector（.qnn）へのパス。
 	* @return
 	*   成功した場合はtrue、失敗した場合はfalseを返す。
+	* @details 画像入力（VLM）には画像対応、音声入力（ALM）には音声対応のprojectorが必要です。
+	*   QNN projectorはAndroid arm64とWindows ARM64に対応します。
 	*   
 	* \~english
 	* @brief   Open a multimodal projector file.
-	* @param mmproj_path    Path for MMPROJ file
+	* @param mmproj_path    Path to an MMPROJ GGUF or self-contained ailia QNN projector (.qnn)
 	* @return
 	*   If this function is successful, it returns  true  , or  false  otherwise.
+	* @details Image input (VLM) requires a vision-capable projector, while audio input (ALM)
+	*   requires an audio-capable projector. QNN projectors support Android arm64 and Windows ARM64.
 	*/
 	public bool OpenMultimodalProjector(string mmproj_path){
 		if (net == IntPtr.Zero){
@@ -137,15 +239,15 @@ public class AiliaLLMModel : IDisposable
 	/**
 	* \~japanese
 	* @brief マルチモーダル機能がサポートされているかを確認します。
-	* @param vision_support 画像処理をサポートしているか
-	* @param audio_support 音声処理をサポートしているか
+	* @param vision_support 画像入力（VLM）をサポートしているか
+	* @param audio_support 音声入力（ALM）をサポートしているか
 	* @return
 	*   成功した場合はtrue、失敗した場合はfalseを返す。
 	*   
 	* \~english
 	* @brief Check if multimodal features are supported.
-	* @param vision_support Whether image processing is supported
-	* @param audio_support Whether audio processing is supported
+	* @param vision_support Whether image input (VLM) is supported
+	* @param audio_support Whether audio input (ALM) is supported
 	* @return
 	*   If this function is successful, it returns  true  , or  false  otherwise.
 	*/
@@ -355,6 +457,54 @@ public class AiliaLLMModel : IDisposable
 			return false;
 		}
 
+		return true;
+	}
+
+    /** @brief Sets structured JSON history. Required with tools; media parts need a compatible projector. */
+    public bool SetPromptJson(string messagesJson) {
+        if (messagesJson == null) return false;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(messagesJson + "\u0000");
+        var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
+        int status;
+        try { status = AiliaLLM.ailiaLLMSetPromptJson(net, handle.AddrOfPinnedObject()); }
+        finally { handle.Free(); }
+        context_full = status == AiliaLLM.AILIA_LLM_STATUS_CONTEXT_FULL;
+        if (status != 0) { if (logging) Debug.Log("SetPromptJson failed " + status); return false; }
+        buf = new byte[0]; before_text = "";
+        return true;
+    }
+
+    /** @brief Gets buffered assistant JSON without collecting deltas. Empty string on error. */
+    public string GetResponseJson() {
+        uint size = 0;
+        int status = AiliaLLM.ailiaLLMGetResponseJsonSize(net, ref size);
+        if (status != 0) { if (logging) Debug.Log("GetResponseJsonSize failed " + status); return ""; }
+        var bytes = new byte[size];
+        var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
+        try { status = AiliaLLM.ailiaLLMGetResponseJson(net, handle.AddrOfPinnedObject(), size); }
+        finally { handle.Free(); }
+        if (status != 0) { if (logging) Debug.Log("GetResponseJson failed " + status); return ""; }
+        return System.Text.Encoding.UTF8.GetString(bytes, 0, (int)size - 1);
+    }
+
+	public bool SetTools(string tools_json)
+	{
+		int status = 0;
+		if (string.IsNullOrEmpty(tools_json)){
+			status = AiliaLLM.ailiaLLMSetTools(net, IntPtr.Zero);
+		} else {
+			byte[] tools_bytes = System.Text.Encoding.UTF8.GetBytes(tools_json + "\u0000");
+			GCHandle tools_handle = GCHandle.Alloc(tools_bytes, GCHandleType.Pinned);
+			status = AiliaLLM.ailiaLLMSetTools(net, tools_handle.AddrOfPinnedObject());
+			tools_handle.Free();
+		}
+		if (status != 0){
+			if (logging)
+			{
+				Debug.Log("ailiaLLMSetTools failed " + status);
+			}
+			return false;
+		}
 		return true;
 	}
 

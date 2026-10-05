@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: dd0731e994fb64cccb6c885f4b5ef87d
+guid: 4da96f84f31852ddbe2b24fdf3b2a22a
 PluginImporter:
   externalObjects: {}
   serializedVersion: 2
@@ -31,7 +31,7 @@ PluginImporter:
       settings:
         CPU: ARMv7
   - first:
-      Any: 
+      Any:
     second:
       enabled: 0
       settings: {}
@@ -46,19 +46,19 @@ PluginImporter:
   - first:
       Standalone: Linux64
     second:
-      enabled: 1
+      enabled: 0
       settings:
-        CPU: AnyCPU
+        CPU: None
   - first:
       Standalone: OSXUniversal
     second:
-      enabled: 1
+      enabled: 0
       settings:
-        CPU: x86_64
+        CPU: None
   - first:
       Standalone: Win
     second:
-      enabled: 1
+      enabled: 0
       settings:
         CPU: None
   - first:
@@ -74,8 +74,8 @@ PluginImporter:
       settings:
         AddToEmbeddedBinaries: false
         CPU: AnyCPU
-        CompileFlags: 
-        FrameworkDependencies: 
-  userData: 
-  assetBundleName: 
-  assetBundleVariant: 
+        CompileFlags:
+        FrameworkDependencies:
+  userData:
+  assetBundleName:
+  assetBundleVariant:

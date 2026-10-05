@@ -146,6 +146,18 @@ public class AiliaLLM
     public const int AILIA_LLM_STATUS_ERROR_BUFFER_API = (-9);
     /**
     * \~japanese
+    * @def AILIA_LLM_STATUS_PARSE_ERROR
+    * @brief 生成テキストの解析に失敗した
+    * @remark モデルの出力がチャットテンプレートのツール呼び出し構文と一致しませんでした。生成時と同じツール定義とThinking設定で解析しているか確認してください。
+    *
+    * \~english
+    * @def AILIA_LLM_STATUS_PARSE_ERROR
+    * @brief Failed to parse the generated text.
+    * @remark The model output did not match the tool call syntax of the chat template. Please check that the same tool definitions and thinking setting as used for the generation are set.
+    */
+    public const int AILIA_LLM_STATUS_PARSE_ERROR = (-10);
+    /**
+    * \~japanese
     * @def AILIA_LLM_STATUS_UNIMPLEMENTED
     * @brief 未実装
     * @remark
@@ -215,11 +227,11 @@ public class AiliaLLM
         */
         public uint data_size;
         /**
-        * @brief Width for images (pixels), sample count for audio
+        * @brief Width for raw RGB images; use 0 for encoded image/audio data.
         */
         public uint width;
         /**
-        * @brief Height for images (pixels), unused for audio (set to 0)
+        * @brief Height for raw RGB images; use 0 for encoded image/audio data.
         */
         public uint height;
     }
@@ -274,22 +286,24 @@ public class AiliaLLM
     * \~japanese
     * @brief モデルファイルを読み込みます。
     * @param llm LLMオブジェクトポインタへのポインタ
-    * @param path GGUFファイルのパス
+    * @param path GGUFまたはQNNパッケージのパス
     * @param n_ctx コンテキスト長（0でモデルのデフォルト）
     * @return
     *   成功した場合は \ref AILIA_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     * @details
-    *   GGUFのモデルファイルを読み込みます。
+    *   バックエンド未選択ならGGUFはCPU/GPU、.qnnはHTPを自動選択します。
+    *   明示選択したバックエンドと異なるモデル形式は拒否します。
     *
     * \~english
     * @brief Open model file.
     * @param llm A pointer to the LLM instance pointer
-    * @param path Path for GGUF
+    * @param path Path for a GGUF model or QNN package
     * @param n_ctx Context length for model (0 is model default）
     * @return
     *   If this function is successful, it returns  \ref AILIA_STATUS_SUCCESS , or an error code otherwise.
     * @details
-    *   Open a model file for GGUF.
+    *   Without an explicit backend selection, GGUF selects CPU/GPU and .qnn
+    *   selects HTP. A model format mismatching an explicit selection is rejected.
     */
     #if (UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
         [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenModelFileW", CharSet=CharSet.Unicode)]
@@ -352,6 +366,36 @@ public class AiliaLLM
 
     /**
     * \~japanese
+    * @brief ツール（関数）の定義を設定します。
+    * @param llm LLMオブジェクトポインタ
+    * @param tools_json OpenAI互換のツール定義JSON配列（UTF-8、NULL終端）。IntPtr.Zeroで解除します。
+    * @return
+    *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
+    * @details
+    *   OpenAI Chat Completions APIのtoolsパラメータと同じ形式でツールを定義します。
+    *   設定したツールは次回のailiaLLMSetPrompt時にチャットテンプレート経由でプロンプトへ展開され、
+    *   出力はツール呼び出し構文のgrammarで制約されます。生の出力はailiaLLMGetResponseJsonで構造化できます。
+    *   ツール設定中、role "assistant" のcontentは生の出力、role "tool" のcontentはツールの実行結果として解釈されます。
+    *   ツール設定中は従来のプロンプトAPIを拒否します。SetPromptJson/GetResponseJsonを使用してください。
+    *
+    * \~english
+    * @brief Set the tool (function) definitions.
+    * @param llm A LLM instance pointer
+    * @param tools_json OpenAI-compatible JSON array of tool definitions (UTF-8, null terminated). IntPtr.Zero clears the tools.
+    * @return
+    *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
+    * @details
+    *   Tools are defined in the same format as the tools parameter of the OpenAI Chat Completions API.
+    *   They are rendered into the prompt through the chat template on the next ailiaLLMSetPrompt,
+    *   and the output is constrained by a grammar for the tool call syntax. Parse the raw output with ailiaLLMGetResponseJson.
+    *   While tools are set, the content of role "assistant" is the raw output and the content of role "tool" is the tool result.
+    *   Legacy prompt APIs reject tool use. Use SetPromptJson/GetResponseJson instead.
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetTools(IntPtr llm, IntPtr tools_json);
+
+    /**
+    * \~japanese
     * @brief プロンプトを設定します。
     * @param llm LLMオブジェクトポインタへのポインタ
     * @param message メッセージの配列
@@ -375,6 +419,13 @@ public class AiliaLLM
     */
     [DllImport(LIBRARY_NAME)]
     public static extern int ailiaLLMSetPrompt(IntPtr llm, IntPtr messages, uint messages_len);
+
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetPromptJson(IntPtr llm, IntPtr messages_json);
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMGetResponseJsonSize(IntPtr llm, ref uint size);
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMGetResponseJson(IntPtr llm, IntPtr json, uint size);
 
     /**
     * \~japanese
@@ -534,22 +585,26 @@ public class AiliaLLM
     * \~japanese
     * @brief マルチモーダルプロジェクタファイルを読み込みます。
     * @param llm LLMオブジェクトポインタ
-    * @param mmproj_path MMPROJファイルのパス（GGUF形式）
+    * @param mmproj_path MMPROJ GGUFまたは自己完結ailia QNN projector（.qnn）のパス
     * @return
     *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     * @details
     *   マルチモーダル機能を使用するには、先にailiaLLMOpenModelFileでテキストモデルを読み込み、
     *   その後でこの関数でマルチモーダルプロジェクタを読み込む必要があります。
+    *   画像入力（VLM）には画像対応、音声入力（ALM）には音声対応のprojectorが必要です。
+    *   QNN projectorはAndroid arm64とWindows ARM64に対応します。
     *
     * \~english
     * @brief Load multimodal projector file.
     * @param llm A LLM instance pointer
-    * @param mmproj_path Path to the MMPROJ file (GGUF format)
+    * @param mmproj_path Path to an MMPROJ GGUF or self-contained ailia QNN projector (.qnn)
     * @return
     *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
     * @details
     *   To use multimodal features, you must first load the text model with ailiaLLMOpenModelFile,
     *   then load the multimodal projector with this function.
+    *   Image input (VLM) requires a vision-capable projector, while audio input (ALM)
+    *   requires an audio-capable projector. QNN projectors support Android arm64 and Windows ARM64.
     */
     #if (UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
         [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenMultimodalProjectorFileW", CharSet=CharSet.Unicode)]
@@ -563,8 +618,8 @@ public class AiliaLLM
     * \~japanese
     * @brief マルチモーダル機能がサポートされているかを確認します。
     * @param llm LLMオブジェクトポインタ
-    * @param vision_support 画像処理をサポートしているか
-    * @param audio_support 音声処理をサポートしているか
+    * @param vision_support 画像入力（VLM）をサポートしているか
+    * @param audio_support 音声入力（ALM）をサポートしているか
     * @return
     *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     * @details
@@ -573,8 +628,8 @@ public class AiliaLLM
     * \~english
     * @brief Check if multimodal features are supported.
     * @param llm A LLM instance pointer
-    * @param vision_support Whether image processing is supported
-    * @param audio_support Whether audio processing is supported
+    * @param vision_support Whether image input (VLM) is supported
+    * @param audio_support Whether audio input (ALM) is supported
     * @return
     *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
     * @details
@@ -613,13 +668,13 @@ public class AiliaLLM
 
     /**
     * \~japanese
-    * @brief 利用可能な計算環境(CPU, GPU)の数を取得します
+    * @brief 利用可能な計算環境(GPU, CPU, HTP (QNN))の数を取得します
     * @param env_count 計算環境情報の数の格納先
     * @return
     *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     *
     * \~english
-    * @brief Gets the number of available computational environments (CPU, GPU).
+    * @brief Gets the number of available computational environments (GPU, CPU, HTP (QNN)).
     * @param env_count The storage location of the number of computational environment information
     * @return
     *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
@@ -646,6 +701,12 @@ public class AiliaLLM
     [DllImport(LIBRARY_NAME)]
     public static extern int ailiaLLMGetBackendName(ref IntPtr env, uint env_idx);
 
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMGetBackendDeviceName(ref IntPtr name, uint env_idx);
+
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetBackend(IntPtr llm, uint backend_idx);
+
     /**
     * \~japanese
     * @brief LLMオブジェクトを破棄します。
@@ -657,5 +718,33 @@ public class AiliaLLM
     */
     [DllImport(LIBRARY_NAME)]
     public static extern void ailiaLLMDestroy(IntPtr llm);
+    /**
+    * \~japanese
+    * @brief デバイスのQNN成果物名（例: "sm8475"）を取得します。
+    * @param model_name ライブラリが所有する文字列へのポインタ。解放しないでください。
+    * @return QNN非対応時はUNIMPLEMENTED、未対応デバイスではOTHER_ERRORを返します。
+    * @details QNNはAndroid arm64とWindows ARM64に対応します。
+    *
+    * \~english
+    * @brief Gets the device QNN artifact stem (for example, "sm8475") without a model.
+    * @param model_name Pointer to a library-owned string; do not free it.
+    * @return UNIMPLEMENTED when QNN is unavailable, or OTHER_ERROR for unsupported devices.
+    * @details QNN is supported on Android arm64 and Windows ARM64.
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMGetQNNModelName(ref IntPtr model_name);
+    /**
+    * \~japanese
+    * @brief モデルのエラー詳細をUTF-8文字列で取得します。返された文字列は解放しないでください。
+    * @param llm LLMオブジェクトポインタ
+    * @return ライブラリが所有するUTF-8文字列へのポインタ
+    *
+    * \~english
+    * @brief Gets the model's error detail as a library-owned UTF-8 string; do not free it.
+    * @param llm An LLM instance pointer
+    * @return Pointer to a library-owned UTF-8 string
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern IntPtr ailiaLLMGetErrorDetail(IntPtr llm);
 }
 } // namespace ailiaLLM
