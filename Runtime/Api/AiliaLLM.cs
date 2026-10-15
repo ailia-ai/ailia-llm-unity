@@ -315,6 +315,32 @@ public class AiliaLLM
 
     /**
     * \~japanese
+    * @brief MTPドラフトモデルを開き、生成をドラフト・本体検証経路に切り替えます。
+    * @param llm LLMオブジェクト
+    * @param path 対応するGemma 4 assistant GGUF、またはQNN本体用assistant .qnnのパス
+    * @param n_draft ドラフトトークン数（1以上）。QNNでは最大3。
+    * @details 本体を開いた後、プロンプト設定前に一度呼び出します。
+    * CPU/GPU Gemma 4 GGUFとQNNのテキスト生成に対応します。
+    * 指定数のドラフトと本体の1トークンを合わせて検証します。
+    * \~english
+    * @brief Open an MTP assistant and enable draft/target verification decoding.
+    * @param llm LLM instance
+    * @param path Path to a matching Gemma 4 assistant GGUF, or assistant .qnn for a QNN target
+    * @param n_draft Number of draft tokens (at least 1). QNN supports up to 3.
+    * @details Call once after opening the target and before setting a prompt.
+    * Supports text generation with CPU/GPU Gemma 4 GGUF and QNN models.
+    * Verify the requested draft tokens together with one target token.
+    */
+    #if (UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
+        [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenMtpModelFileW", CharSet=CharSet.Unicode)]
+        public static extern int ailiaLLMOpenMtpModelFile(IntPtr llm, string path, uint n_draft);
+    #else
+        [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenMtpModelFileA", CharSet=CharSet.Ansi)]
+        public static extern int ailiaLLMOpenMtpModelFile(IntPtr llm, string path, uint n_draft);
+    #endif
+
+    /**
+    * \~japanese
     * @brief サンプリングのパラメータを設定します。
     * @param llm LLMオブジェクトポインタへのポインタ
     * @param top_k サンプリングする確率値の上位個数、デフォルト40
@@ -706,6 +732,26 @@ public class AiliaLLM
 
     [DllImport(LIBRARY_NAME)]
     public static extern int ailiaLLMSetBackend(IntPtr llm, uint backend_idx);
+
+    /**
+    * \~japanese
+    * @brief モデルを開く前にCPUスレッド数を設定します。
+    * @param llm LLMインスタンス
+    * @param n_threads スレッド数（0は自動設定）。
+    * @return 成功時はAILIA_LLM_STATUS_SUCCESS。モデルを開いた後はAILIA_LLM_STATUS_INVALID_STATE。
+    * @details 未指定の場合も0として扱います。Androidでは高効率コア（高性能側のbig/prime）の数を使用します。
+    * 取得できない場合は既存のコア数判定を使用します。本体のDecode/Prefill、assistant、VLM/ALMのCPU推論スレッド数に同じ値を使用します。
+    *
+    * \~english
+    * @brief Sets the CPU thread count before opening the model.
+    * @param llm LLM instance
+    * @param n_threads Thread count (0 selects automatically).
+    * @return AILIA_LLM_STATUS_SUCCESS on success, or AILIA_LLM_STATUS_INVALID_STATE after a model is opened.
+    * @details The default is 0 when this API is not called. On Android, automatic selection uses the number of performance (big/prime) cores.
+    * If topology is unavailable, the existing core-count heuristic is used. Target decode/prefill, assistant and VLM/ALM CPU inference threads share this value.
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetNumThreads(IntPtr llm, uint n_threads);
 
     /**
     * \~japanese
