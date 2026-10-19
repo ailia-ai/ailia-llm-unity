@@ -150,11 +150,15 @@ public class AiliaLLMModel : IDisposable
 	* @brief インスタンスを作成します。
 	* @return
 	*   成功した場合はtrue、失敗した場合はfalseを返す。
+	* @remark
+	*   QNNを使用する場合は、この関数を呼び出したスレッドでCloseまたはDisposeを呼び出して解放してください。
 	*   
 	* \~english
 	* @brief   Create a instance.
 	* @return
 	*   If this function is successful, it returns  true  , or  false  otherwise.
+	* @remark
+	*   When using QNN, call Close or Dispose on the same thread that called this function to release the instance.
 	*/
 	public bool Create(){
 		if (net != IntPtr.Zero){
@@ -345,11 +349,19 @@ public class AiliaLLMModel : IDisposable
 	* @brief インスタンスを破棄します。
 	* @details
 	*   インスタンスを破棄し、初期化します。
+	* @remark
+	*   QNNを使用する場合は、Createを呼び出したスレッドで呼び出してください。
+	*   QNN使用時に解放だけをUIスレッドなどの別スレッドへ移すと、その後、別のスレッドでQNNを使用する際に
+	*   QnnDevice_create failed: code 14001が発生することがあります。
 	*   
 	*  \~english
 	* @brief   Destroys instance
 	* @details
 	*   Destroys and initializes the instance.
+	* @remark
+	*   When using QNN, this method must be called on the same thread that called Create.
+	*   When using QNN, moving only resource release to another thread, such as the UI thread, may cause
+	*   QnnDevice_create failed: code 14001 when QNN is subsequently used on a different thread.
 	*/
 	public virtual void Close()
 	{
@@ -362,9 +374,15 @@ public class AiliaLLMModel : IDisposable
 	/**
 	* \~japanese
 	* @brief リソースを解放します。
+	* @remark
+	*   QNNを使用する場合は、Createを呼び出したスレッドで呼び出してください。
+	*   QNN使用時は、ファイナライザーが同じスレッドでの実行を保証しないため、GCに頼らずCloseまたはDisposeで明示的に解放してください。
 	*   
 	*  \~english
 	* @brief   Release resources.
+	* @remark
+	*   When using QNN, this method must be called on the same thread that called Create.
+	*   When using QNN, explicitly call Close or Dispose instead of relying on garbage collection, because finalization does not guarantee execution on that thread.
 	*/
 	public virtual void Dispose()
 	{
