@@ -16,7 +16,14 @@ public class AiliaLLMChatMessage{
 }
 
 public class AiliaLLMMediaData{
-    public string media_type; // "image" or "audio" (requires an audio-capable mmproj)
+    /**
+     * \~japanese
+     * @brief メディア種別（"image"または"audio"）。音声には対応projectorが必要です。
+     *
+     * \~english
+     * @brief Media type ("image" or "audio"). Audio requires a compatible projector.
+     */
+    public string media_type;
 	public string file_path;
 	public byte[] data;
 	public uint width;
@@ -116,6 +123,15 @@ public class AiliaLLMModel : IDisposable
 
 	// instance
 	IntPtr net = IntPtr.Zero;
+	/**
+	 * \~japanese
+	 * @brief 最後のエラーの詳細を取得します。
+	 * @return エラー詳細。詳細がない場合は空文字列。
+	 *
+	 * \~english
+	 * @brief Gets details of the last error.
+	 * @return Error details, or an empty string if unavailable.
+	 */
 	public string GetErrorDetail() {
 		IntPtr detail = AiliaLLM.ailiaLLMGetErrorDetail(net);
 		return detail == IntPtr.Zero ? "" : Marshal.PtrToStringAnsi(detail);
@@ -134,11 +150,15 @@ public class AiliaLLMModel : IDisposable
 	* @brief インスタンスを作成します。
 	* @return
 	*   成功した場合はtrue、失敗した場合はfalseを返す。
+	* @remark
+	*   QNNを使用する場合は、この関数を呼び出したスレッドでCloseまたはDisposeを呼び出して解放してください。
 	*   
 	* \~english
 	* @brief   Create a instance.
 	* @return
 	*   If this function is successful, it returns  true  , or  false  otherwise.
+	* @remark
+	*   When using QNN, call Close or Dispose on the same thread that called this function to release the instance.
 	*/
 	public bool Create(){
 		if (net != IntPtr.Zero){
@@ -157,9 +177,40 @@ public class AiliaLLMModel : IDisposable
 		return true;
 	}
 
-	/** Select a GPU, CPU, or HTP (QNN) backend before Open.
-	 * Without a selection, .qnn chooses HTP automatically. An explicit CPU/GPU
-	 * selection rejects .qnn, and an explicit HTP selection rejects GGUF.
+	/**
+	 * \~japanese
+	 * @brief Openの前にCPUスレッド数を設定します。
+	 * @param n_threads スレッド数（0は自動設定）。
+	 * @return 成功した場合はtrue、失敗した場合はfalse。
+	 * @details 未指定の場合も0として扱います。Androidでは高効率コア（高性能側のbig/prime）の数を使用します。
+	 * 取得できない場合は既存のコア数判定を使用します。本体のDecode/Prefill、assistant、VLM/ALMのCPU推論スレッド数に同じ値を使用します。
+	 *
+	 * \~english
+	 * @brief Sets the CPU thread count before Open.
+	 * @param n_threads Thread count (0 selects automatically).
+	 * @return True on success, or false on failure.
+	 * @details The default is 0 when this method is not called. On Android, automatic selection uses the number of performance (big/prime) cores.
+	 * If topology is unavailable, the existing core-count heuristic is used. Target decode/prefill, assistant and VLM/ALM CPU inference threads share this value.
+	 */
+	public bool SetNumThreads(uint n_threads){
+		if (net == IntPtr.Zero){
+			return false;
+		}
+		return AiliaLLM.ailiaLLMSetNumThreads(net, n_threads) == AiliaLLM.AILIA_LLM_STATUS_SUCCESS;
+	}
+
+	/**
+	 * \~japanese
+	 * @brief Openの前にCPU、GPUまたはHTP（QNN）バックエンドを選択します。
+	 * @param backend_idx GetBackendListで取得したバックエンドのインデックス。
+	 * @return 成功した場合はtrue、失敗した場合はfalse。
+	 * @details 未選択の場合、.qnnはHTPを自動選択します。明示的なCPU/GPU選択では.qnnを、HTP選択ではGGUFを拒否します。
+	 *
+	 * \~english
+	 * @brief Selects a CPU, GPU, or HTP (QNN) backend before Open.
+	 * @param backend_idx Backend index obtained from GetBackendList.
+	 * @return True on success, or false on failure.
+	 * @details Without a selection, .qnn selects HTP automatically. An explicit CPU/GPU selection rejects .qnn; an explicit HTP selection rejects GGUF.
 	 */
 	public bool SetBackend(uint backend_idx){
 		if (net == IntPtr.Zero){
@@ -201,6 +252,28 @@ public class AiliaLLMModel : IDisposable
 
 		return true;
 	}
+
+    /**
+     * \~japanese
+     * @brief MTPドラフトモデルを開き、生成をドラフト・本体検証経路に切り替えます。
+     * @param model_path 対応するGemma 4 assistant GGUF、またはQNN本体用assistant .qnnへのパス。
+     * @param n_draft ドラフトトークン数（1以上）。QNNでは最大3。
+     * @return 成功した場合はtrue、失敗した場合はfalse。
+     * @details Openの後、プロンプト設定前に一度呼び出します。CPU/GPU Gemma 4 GGUFとQNNのテキスト生成に対応します。
+     *
+     * \~english
+     * @brief Opens an MTP assistant and enables draft/target verification decoding.
+     * @param model_path Path to a matching Gemma 4 assistant GGUF, or assistant .qnn for a QNN target.
+     * @param n_draft Number of draft tokens (at least 1). QNN supports up to 3.
+     * @return True on success, or false on failure.
+     * @details Call once after Open and before setting a prompt. Supports CPU/GPU Gemma 4 GGUF and QNN text generation.
+     */
+    public bool OpenMtpModel(string model_path, uint n_draft) {
+        if (net == IntPtr.Zero) return false;
+        int status = AiliaLLM.ailiaLLMOpenMtpModelFile(net, model_path, n_draft);
+        if (status != 0 && logging) Debug.Log("ailiaLLMOpenMtpModelFile failed " + status);
+        return status == AiliaLLM.AILIA_LLM_STATUS_SUCCESS;
+    }
 
 	/**
 	* \~japanese
@@ -276,11 +349,19 @@ public class AiliaLLMModel : IDisposable
 	* @brief インスタンスを破棄します。
 	* @details
 	*   インスタンスを破棄し、初期化します。
+	* @remark
+	*   QNNを使用する場合は、Createを呼び出したスレッドで呼び出してください。
+	*   QNN使用時に解放だけをUIスレッドなどの別スレッドへ移すと、その後、別のスレッドでQNNを使用する際に
+	*   QnnDevice_create failed: code 14001が発生することがあります。
 	*   
 	*  \~english
 	* @brief   Destroys instance
 	* @details
 	*   Destroys and initializes the instance.
+	* @remark
+	*   When using QNN, this method must be called on the same thread that called Create.
+	*   When using QNN, moving only resource release to another thread, such as the UI thread, may cause
+	*   QnnDevice_create failed: code 14001 when QNN is subsequently used on a different thread.
 	*/
 	public virtual void Close()
 	{
@@ -293,9 +374,15 @@ public class AiliaLLMModel : IDisposable
 	/**
 	* \~japanese
 	* @brief リソースを解放します。
+	* @remark
+	*   QNNを使用する場合は、Createを呼び出したスレッドで呼び出してください。
+	*   QNN使用時は、ファイナライザーが同じスレッドでの実行を保証しないため、GCに頼らずCloseまたはDisposeで明示的に解放してください。
 	*   
 	*  \~english
 	* @brief   Release resources.
+	* @remark
+	*   When using QNN, this method must be called on the same thread that called Create.
+	*   When using QNN, explicitly call Close or Dispose instead of relying on garbage collection, because finalization does not guarantee execution on that thread.
 	*/
 	public virtual void Dispose()
 	{
@@ -460,7 +547,19 @@ public class AiliaLLMModel : IDisposable
 		return true;
 	}
 
-    /** @brief Sets structured JSON history. Required with tools; media parts need a compatible projector. */
+    /**
+     * \~japanese
+     * @brief 構造化されたJSON形式の会話履歴を設定します。
+     * @param messagesJson JSON形式の会話履歴。
+     * @return 成功した場合はtrue、失敗した場合はfalse。
+     * @details ツール使用時に必要です。メディア入力には対応projectorが必要です。
+     *
+     * \~english
+     * @brief Sets structured JSON conversation history.
+     * @param messagesJson Conversation history in JSON format.
+     * @return True on success, or false on failure.
+     * @details Required when using tools. Media inputs require a compatible projector.
+     */
     public bool SetPromptJson(string messagesJson) {
         if (messagesJson == null) return false;
         var bytes = System.Text.Encoding.UTF8.GetBytes(messagesJson + "\u0000");
@@ -474,7 +573,15 @@ public class AiliaLLMModel : IDisposable
         return true;
     }
 
-    /** @brief Gets buffered assistant JSON without collecting deltas. Empty string on error. */
+    /**
+     * \~japanese
+     * @brief 差分テキストを収集せずに、保持されたassistant応答をJSONで取得します。
+     * @return JSON形式のassistant応答。エラー時は空文字列。
+     *
+     * \~english
+     * @brief Gets the buffered assistant response as JSON without collecting deltas.
+     * @return Assistant response in JSON format, or an empty string on error.
+     */
     public string GetResponseJson() {
         uint size = 0;
         int status = AiliaLLM.ailiaLLMGetResponseJsonSize(net, ref size);
@@ -487,6 +594,17 @@ public class AiliaLLMModel : IDisposable
         return System.Text.Encoding.UTF8.GetString(bytes, 0, (int)size - 1);
     }
 
+	/**
+	 * \~japanese
+	 * @brief 利用可能なツールをJSONで設定します。
+	 * @param tools_json ツール定義のJSON。nullまたは空文字列でツールを無効にします。
+	 * @return 成功した場合はtrue、失敗した場合はfalse。
+	 *
+	 * \~english
+	 * @brief Sets the available tools in JSON format.
+	 * @param tools_json Tool definitions in JSON. Null or an empty string disables tools.
+	 * @return True on success, or false on failure.
+	 */
 	public bool SetTools(string tools_json)
 	{
 		int status = 0;

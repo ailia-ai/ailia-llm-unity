@@ -270,6 +270,8 @@ public class AiliaLLM
     *   成功した場合は \ref AILIA_LLM_STATUS_SUCCESS 、そうでなければエラーコードを返す。
     * @details
     *   LLMオブジェクトを作成します。
+    * @remark
+    *   QNNを使用する場合は、この関数を呼び出したスレッドでailiaLLMDestroyを呼び出してLLMオブジェクトを破棄してください。
     *
     * \~english
     * @brief Creates a LLM instance.
@@ -278,6 +280,8 @@ public class AiliaLLM
     *   If this function is successful, it returns  \ref AILIA_LLM_STATUS_SUCCESS , or an error code otherwise.
     * @details
     *   Creates a LLM instance.
+    * @remark
+    *   When using QNN, the LLM instance must be destroyed by calling ailiaLLMDestroy on the same thread that called this function.
     */
     [DllImport(LIBRARY_NAME)]
     public static extern int ailiaLLMCreate(ref IntPtr llm);
@@ -311,6 +315,32 @@ public class AiliaLLM
     #else
         [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenModelFileA", CharSet=CharSet.Ansi)]
         public static extern int ailiaLLMOpenModelFile(IntPtr llm, string path, uint n_ctx);
+    #endif
+
+    /**
+    * \~japanese
+    * @brief MTPドラフトモデルを開き、生成をドラフト・本体検証経路に切り替えます。
+    * @param llm LLMオブジェクト
+    * @param path 対応するGemma 4 assistant GGUF、またはQNN本体用assistant .qnnのパス
+    * @param n_draft ドラフトトークン数（1以上）。QNNでは最大3。
+    * @details 本体を開いた後、プロンプト設定前に一度呼び出します。
+    * CPU/GPU Gemma 4 GGUFとQNNのテキスト生成に対応します。
+    * 指定数のドラフトと本体の1トークンを合わせて検証します。
+    * \~english
+    * @brief Open an MTP assistant and enable draft/target verification decoding.
+    * @param llm LLM instance
+    * @param path Path to a matching Gemma 4 assistant GGUF, or assistant .qnn for a QNN target
+    * @param n_draft Number of draft tokens (at least 1). QNN supports up to 3.
+    * @details Call once after opening the target and before setting a prompt.
+    * Supports text generation with CPU/GPU Gemma 4 GGUF and QNN models.
+    * Verify the requested draft tokens together with one target token.
+    */
+    #if (UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
+        [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenMtpModelFileW", CharSet=CharSet.Unicode)]
+        public static extern int ailiaLLMOpenMtpModelFile(IntPtr llm, string path, uint n_draft);
+    #else
+        [DllImport(LIBRARY_NAME, EntryPoint = "ailiaLLMOpenMtpModelFileA", CharSet=CharSet.Ansi)]
+        public static extern int ailiaLLMOpenMtpModelFile(IntPtr llm, string path, uint n_draft);
     #endif
 
     /**
@@ -709,12 +739,40 @@ public class AiliaLLM
 
     /**
     * \~japanese
+    * @brief モデルを開く前にCPUスレッド数を設定します。
+    * @param llm LLMインスタンス
+    * @param n_threads スレッド数（0は自動設定）。
+    * @return 成功時はAILIA_LLM_STATUS_SUCCESS。モデルを開いた後はAILIA_LLM_STATUS_INVALID_STATE。
+    * @details 未指定の場合も0として扱います。Androidでは高効率コア（高性能側のbig/prime）の数を使用します。
+    * 取得できない場合は既存のコア数判定を使用します。本体のDecode/Prefill、assistant、VLM/ALMのCPU推論スレッド数に同じ値を使用します。
+    *
+    * \~english
+    * @brief Sets the CPU thread count before opening the model.
+    * @param llm LLM instance
+    * @param n_threads Thread count (0 selects automatically).
+    * @return AILIA_LLM_STATUS_SUCCESS on success, or AILIA_LLM_STATUS_INVALID_STATE after a model is opened.
+    * @details The default is 0 when this API is not called. On Android, automatic selection uses the number of performance (big/prime) cores.
+    * If topology is unavailable, the existing core-count heuristic is used. Target decode/prefill, assistant and VLM/ALM CPU inference threads share this value.
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetNumThreads(IntPtr llm, uint n_threads);
+
+    /**
+    * \~japanese
     * @brief LLMオブジェクトを破棄します。
     * @param llm LLMオブジェクトポインタ
+    * @remark
+    *   QNNを使用する場合は、ailiaLLMCreateを呼び出したスレッドで呼び出してください。
+    *   QNN使用時に解放だけをUIスレッドなどの別スレッドへ移すと、その後、別のスレッドでQNNを使用する際に
+    *   QnnDevice_create failed: code 14001が発生することがあります。
     *
     * \~english
     * @brief It destroys the LLM instance.
     * @param llm A LLM instance pointer
+    * @remark
+    *   When using QNN, this function must be called on the same thread that called ailiaLLMCreate.
+    *   When using QNN, moving only the release operation to another thread, such as the UI thread, may cause
+    *   QnnDevice_create failed: code 14001 when QNN is subsequently used on a different thread.
     */
     [DllImport(LIBRARY_NAME)]
     public static extern void ailiaLLMDestroy(IntPtr llm);
