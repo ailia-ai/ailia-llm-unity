@@ -759,6 +759,29 @@ public class AiliaLLM
 
     /**
     * \~japanese
+    * @brief QNNの省メモリGraphSwitchingを設定します。既定値は無効です。
+    * @param llm LLMインスタンス
+    * @param enabled 0: 無効、1: 有効
+    * @return 成功時はAILIA_LLM_STATUS_SUCCESS。モデルを開いた後はAILIA_LLM_STATUS_INVALID_STATE。
+    * @details Create後、モデルを開く前に呼び出してください。LLM、MTP、画像・音声グラフに適用します。
+    * 再ロードとメモリを削減しますが、SDKの遅延ロードにより初回実行や生成が遅くなる場合があります。
+    * QNNが使用できない環境で有効化を指定した場合はAILIA_LLM_STATUS_UNIMPLEMENTEDを返します。
+    * 無効化はQNN非対応環境でも成功します。
+    *
+    * \~english
+    * @brief Configures QNN low-memory graph switching; disabled by default.
+    * @param llm LLM instance
+    * @param enabled 0: disabled, 1: enabled
+    * @return SUCCESS, INVALID_ARGUMENT, INVALID_STATE after model open, or UNIMPLEMENTED when enabling without QNN.
+    * @details Call after Create and before opening a model. Applies to LLM, MTP, vision and audio graphs.
+    * Reduces context reloads and memory, but SDK lazy loading can increase first-execution or generation latency.
+    * Disabling succeeds even when QNN is unavailable.
+    */
+    [DllImport(LIBRARY_NAME)]
+    public static extern int ailiaLLMSetQNNGraphSwitching(IntPtr llm, uint enabled);
+
+    /**
+    * \~japanese
     * @brief LLMオブジェクトを破棄します。
     * @param llm LLMオブジェクトポインタ
     * @remark
