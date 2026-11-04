@@ -201,6 +201,28 @@ public class AiliaLLMModel : IDisposable
 
 	/**
 	 * \~japanese
+	 * @brief Create後、Openの前にQNNのGraphSwitchingを設定します。既定値は無効です。
+	 * @param enable 有効にする場合はtrue。
+	 * @return 成功した場合はtrue。QNN非対応環境で有効化した場合やOpen後はfalse。
+	 * @details LLM、MTP、画像・音声グラフに適用します。再ロードとメモリを削減しますが、
+	 * SDKの遅延ロードにより初回実行や生成が遅くなる場合があります。無効化はQNN非対応環境でも成功します。
+	 *
+	 * \~english
+	 * @brief Configures QNN graph switching after Create and before Open; disabled by default.
+	 * @param enable True to enable.
+	 * @return True on success, or false when enabling without QNN or the model is already open.
+	 * @details Applies to LLM, MTP, vision and audio graphs. Reduces context reloads and memory,
+	 * but SDK lazy loading can increase first-execution or generation latency. Disabling succeeds without QNN.
+	 */
+	public bool SetQNNGraphSwitching(bool enable){
+		if (net == IntPtr.Zero){
+			return false;
+		}
+		return AiliaLLM.ailiaLLMSetQNNGraphSwitching(net, enable ? 1u : 0u) == AiliaLLM.AILIA_LLM_STATUS_SUCCESS;
+	}
+
+	/**
+	 * \~japanese
 	 * @brief Openの前にCPU、GPUまたはHTP（QNN）バックエンドを選択します。
 	 * @param backend_idx GetBackendListで取得したバックエンドのインデックス。
 	 * @return 成功した場合はtrue、失敗した場合はfalse。
