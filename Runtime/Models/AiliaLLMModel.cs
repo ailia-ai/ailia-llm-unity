@@ -204,15 +204,24 @@ public class AiliaLLMModel : IDisposable
 	 * @brief Create後、Openの前にQNNのGraphSwitchingを設定します。既定値は無効です。
 	 * @param enable 有効にする場合はtrue。
 	 * @return 成功した場合はtrue。QNN非対応環境で有効化した場合やOpen後はfalse。
-	 * @details LLM、MTP、画像・音声グラフに適用します。再ロードとメモリを削減しますが、
-	 * SDKの遅延ロードにより初回実行や生成が遅くなる場合があります。無効化はQNN非対応環境でも成功します。
+	 * @details LLM、MTP、画像・音声グラフに適用します。
+	 * 無効時（既定値）はコンテキストを保持して速度を優先し、LLM・MTPのコンテキストはモデルを開く時点で読み込みます。
+	 * 有効時はコンテキストを必要時に読み込み、画像・音声とLLMの切り替え時に解放することでメモリ使用量を削減しますが、再ロードにより処理時間が増える場合があります。
+	 * 画像・音声のコンテキストは、どちらの場合も初回使用時に読み込みます。
+	 * メモリに余裕がない端末（SM8475のVLMなど）では有効にしてください。
+	 * 無効化はQNN非対応環境でも成功します。
 	 *
 	 * \~english
 	 * @brief Configures QNN graph switching after Create and before Open; disabled by default.
 	 * @param enable True to enable.
 	 * @return True on success, or false when enabling without QNN or the model is already open.
-	 * @details Applies to LLM, MTP, vision and audio graphs. Reduces context reloads and memory,
-	 * but SDK lazy loading can increase first-execution or generation latency. Disabling succeeds without QNN.
+	 * @details Applies to LLM, MTP, vision and audio graphs.
+	 * When disabled (default), contexts are retained to prioritize speed, and LLM and MTP
+	 * contexts are loaded when the model is opened. When enabled, contexts are loaded when
+	 * needed and released when switching between media and the LLM to reduce memory usage,
+	 * but reloading may increase processing time. In both modes, vision and audio contexts
+	 * are loaded on first use. Enable this on devices with limited memory (e.g. VLM on SM8475).
+	 * Disabling succeeds without QNN.
 	 */
 	public bool SetQNNGraphSwitching(bool enable){
 		if (net == IntPtr.Zero){
