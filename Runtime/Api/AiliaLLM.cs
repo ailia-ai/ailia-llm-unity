@@ -764,7 +764,10 @@ public class AiliaLLM
     * @param enabled 0: 無効、1: 有効
     * @return 成功時はAILIA_LLM_STATUS_SUCCESS。モデルを開いた後はAILIA_LLM_STATUS_INVALID_STATE。
     * @details Create後、モデルを開く前に呼び出してください。LLM、MTP、画像・音声グラフに適用します。
-    * 再ロードとメモリを削減しますが、SDKの遅延ロードにより初回実行や生成が遅くなる場合があります。
+    * 無効時（既定値）はコンテキストを保持して速度を優先します。MTPを使用する場合はMTPを開く時点でLLM・MTPのコンテキストを、使用しない場合は最初の生成時または画像・音声の読み込み前にLLMのコンテキストを読み込みます。
+    * 有効時はコンテキストを必要時に読み込み、画像・音声とLLMの切り替え時に解放することでメモリ使用量を削減しますが、再ロードにより処理時間が増える場合があります。
+    * 画像・音声のコンテキストは、どちらの場合も初回使用時に読み込みます。
+    * メモリに余裕がない端末（SM8475のVLMなど）では有効にしてください。
     * QNNが使用できない環境で有効化を指定した場合はAILIA_LLM_STATUS_UNIMPLEMENTEDを返します。
     * 無効化はQNN非対応環境でも成功します。
     *
@@ -774,7 +777,12 @@ public class AiliaLLM
     * @param enabled 0: disabled, 1: enabled
     * @return SUCCESS, INVALID_ARGUMENT, INVALID_STATE after model open, or UNIMPLEMENTED when enabling without QNN.
     * @details Call after Create and before opening a model. Applies to LLM, MTP, vision and audio graphs.
-    * Reduces context reloads and memory, but SDK lazy loading can increase first-execution or generation latency.
+    * When disabled (default), contexts are retained to prioritize speed. The LLM context is
+    * loaded with the MTP context when the MTP model is opened, or otherwise on the first
+    * generation or before the first vision or audio input. When enabled, contexts are loaded when
+    * needed and released when switching between media and the LLM to reduce memory usage,
+    * but reloading may increase processing time. In both modes, vision and audio contexts
+    * are loaded on first use. Enable this on devices with limited memory (e.g. VLM on SM8475).
     * Disabling succeeds even when QNN is unavailable.
     */
     [DllImport(LIBRARY_NAME)]
